@@ -19,11 +19,13 @@ data OrgEntry = OrgEntry
     , entryFile     :: Maybe String
     } deriving (Show)
 
+-- instance Show OrgEntry where
+--     show (OrgEntry title sched dead cont tags file) = undefined
+
 data EntryDate = EntryDate
     { edDate  :: UTCTime
     , edRecur :: Maybe Recur
     } deriving (Show)
-
 
 -- ignoring lots of stuff for now
 -- events :: [VEvent]
@@ -32,6 +34,7 @@ orgify cal = let eventMap = vcEvents cal
                  events = snd <$> M.toList eventMap
                  entries = toEntry <$> events
              in show entries
+
 
 toEntry :: VEvent -> OrgEntry
 toEntry event =
@@ -54,12 +57,25 @@ toEntry event =
             case S.toList (veRRule event) of
                 [] -> Nothing
                 l -> Just $ rRuleValue $ head l
+        -- what if something is scheduled and has deadline?
+        sched =
+            case title of
+                Nothing -> Nothing
+                Just t ->
+                    if "S: " `isPrefixOf` t
+                        then Just $ EntryDate dateTime recur
+                        else Nothing
+        dead =
+            case title of
+                Nothing -> Nothing
+                Just t ->
+                    if "DL: " `isPrefixOf` t
+                        then Just $ EntryDate dateTime recur
+                        else Nothing
     in OrgEntry
        { entryTitle = title
-       , entrySched = Just $ EntryDate dateTime recur
-         -- default to scheduled for now
-         -- not dealing with Recur yet
-       , entryDead = Nothing
+       , entrySched = sched
+       , entryDead = dead
        , entryContents = contents
        , entryTags = tags
        , entryFile = file
