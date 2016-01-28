@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 module Org where
 import           Data.List
 import qualified Data.Map.Lazy         as M
@@ -30,10 +31,11 @@ data EntryDate = EntryDate
 -- ignoring lots of stuff for now
 -- events :: [VEvent]
 orgify :: VCalendar -> String
-orgify cal = let eventMap = vcEvents cal
-                 events = snd <$> M.toList eventMap
-                 entries = toEntry <$> events
-             in show entries
+orgify cal =
+    let eventMap = vcEvents cal
+        events = snd <$> M.toList eventMap
+        entries = toEntry <$> events
+    in show entries
 
 
 toEntry :: VEvent -> OrgEntry
@@ -58,20 +60,13 @@ toEntry event =
                 [] -> Nothing
                 l -> Just $ rRuleValue $ head l
         -- what if something is scheduled and has deadline?
-        sched =
+        (sched,dead) =
             case title of
-                Nothing -> Nothing
+                Nothing -> (Just $ EntryDate dateTime recur, Nothing) -- default to sched
                 Just t ->
-                    if "S: " `isPrefixOf` t
-                        then Just $ EntryDate dateTime recur
-                        else Nothing
-        dead =
-            case title of
-                Nothing -> Nothing
-                Just t ->
-                    if "DL: " `isPrefixOf` t
-                        then Just $ EntryDate dateTime recur
-                        else Nothing
+                    if | "S: " `isPrefixOf` t ->  (Just $ EntryDate dateTime recur, Nothing)
+                       | "DL: " `isPrefixOf` t -> (Nothing, Just $ EntryDate dateTime recur)
+                       | otherwise -> (Just $ EntryDate dateTime recur, Nothing) -- default to sched
     in OrgEntry
        { entryTitle = title
        , entrySched = sched
