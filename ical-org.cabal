@@ -24,3 +24,4 @@ executable ical-org
                      , containers
                      , time
                      , text
+                     , safe

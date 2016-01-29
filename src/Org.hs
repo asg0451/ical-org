@@ -5,10 +5,16 @@ import qualified Data.Map.Lazy         as M
 import           Data.Monoid
 import qualified Data.Set              as S
 import qualified Data.Text.Lazy        as T
+import           Data.Time
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
 import           Debug.Trace
+import           Safe
 import           Text.ICalendar
+
+
+-- TODO: keep track of uids, link VTodos and VEvents, so that we know if an event is TODO or done. right now they are all TODO
+
 
 -- properties not kept in ical export
 data OrgEntry = OrgEntry
@@ -18,13 +24,67 @@ data OrgEntry = OrgEntry
     , entryContents :: Maybe String
     , entryTags     :: [String]
     , entryFile     :: Maybe String
-    } deriving (Show)
+    }
 
--- instance Show OrgEntry where
---     show (OrgEntry title sched dead cont tags file) = undefined
+{-
+** TODO [#priority] title            :@home:NonSchool:
+   SCHEDULED: <2016-02-01 Mon 19:00 ++1w>
+or DEADLINE: <2016-02-01 Mon 19:00 ++1w>
+   <contents>
+   -}
 
+
+instance Show OrgEntry where
+    show (OrgEntry title sched dead cont tags file) =
+        let firstLine =
+                "** TODO " ++
+                fromJustDef "" title ++ "    " ++ showTags tags ++ "\n"
+            dateLine =
+                case sched of
+                    Just date -> Just $ "SCHEDULED: " ++ showDate date ++ "\n"
+                    Nothing ->
+                        case dead of
+                            Just date ->
+                                Just $ "DEADLINE: " ++ showDate date ++ "\n"
+                            Nothing -> Nothing
+        in mconcat
+               [firstLine, fromJustDef "" dateLine, fromJustDef "" cont, "\n"]
+      where
+        showTags ts = ":" ++ intercalate ":" ts ++ ":"
+        showDate date =
+            let dateTime = edDate date
+            in concat
+                   [ "<"
+                   , case dateTime of
+                         DTStartDateTime dt _ ->
+                             case dt of
+                                 FloatingDateTime f ->
+                                     formatTime
+                                         defaultTimeLocale
+                                         "%Y-%m-%d %a %R"
+                                         f
+                                 UTCDateTime f ->
+                                     formatTime
+                                         defaultTimeLocale
+                                         "%Y-%m-%d %a %R"
+                                         f
+                                 ZonedDateTime f _ ->
+                                     formatTime
+                                         defaultTimeLocale
+                                         "%Y-%m-%d %a %R"
+                                         f
+                         DTStartDate d _ ->
+                             formatTime defaultTimeLocale "%Y-%m-%d %a" $
+                             dateValue d
+                   , ">"]
+
+
+
+
+-- ignoring end datetimes for now
+-- TODO: recur not used yet
 data EntryDate = EntryDate
-    { edDate  :: UTCTime
+    { edDate  :: DTStart
     , edRecur :: Maybe Recur
     } deriving (Show)
 
@@ -40,7 +100,7 @@ orgify cal =
 
 toEntry :: VEvent -> OrgEntry
 toEntry event =
-    let dateTime = dtStampValue $ veDTStamp event
+    let dateTime = veDTStart event
         contents = T.unpack <$> descriptionValue <$> veDescription event
         title = T.unpack <$> summaryValue <$> veSummary event
         tagsList =
@@ -60,15 +120,28 @@ toEntry event =
                 [] -> Nothing
                 l -> Just $ rRuleValue $ head l
         -- what if something is scheduled and has deadline?
-        (sched,dead) =
-            case title of
-                Nothing -> (Just $ EntryDate dateTime recur, Nothing) -- default to sched
-                Just t ->
-                    if | "S: " `isPrefixOf` t ->  (Just $ EntryDate dateTime recur, Nothing)
-                       | "DL: " `isPrefixOf` t -> (Nothing, Just $ EntryDate dateTime recur)
-                       | otherwise -> (Just $ EntryDate dateTime recur, Nothing) -- default to sched
+        (sched,dead,title') =
+            case dateTime of
+                Nothing -> (Nothing, Nothing, title)
+                Just dt ->
+                    case title of
+                        Nothing ->
+                            (Just $ EntryDate dt recur, Nothing, title) -- default to sched
+                        Just t ->
+                            if |  "S: " `isPrefixOf` t ->
+                                   ( Just $ EntryDate dt recur
+                                   , Nothing
+                                   , drop 3 <$> title)
+                               |  "DL: " `isPrefixOf` t ->
+                                   ( Nothing
+                                   , Just $ EntryDate dt recur
+                                   , drop 4 <$> title)
+                               |  otherwise ->
+                                   ( Just $ EntryDate dt recur
+                                   , Nothing
+                                   , title) -- default to sched
     in OrgEntry
-       { entryTitle = title
+       { entryTitle = title'
        , entrySched = sched
        , entryDead = dead
        , entryContents = contents
