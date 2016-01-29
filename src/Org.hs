@@ -13,9 +13,6 @@ import           Safe
 import           Text.ICalendar
 
 
--- TODO: keep track of uids, link VTodos and VEvents, so that we know if an event is TODO or done. right now they are all TODO
-
-
 -- properties not kept in ical export
 data OrgEntry = OrgEntry
     { entryTitle    :: Maybe String
@@ -50,9 +47,16 @@ instance Show OrgEntry where
             content =
                 case cont of
                     Nothing -> ""
-                    Just c -> unlines $ ("\t" ++) <$> lines c
+                    Just c -> unlines $ ("\t" ++) <$> (lines $ tr c)
         in mconcat [firstLine, dateLine, content, "\n"]
       where
+        tr =
+            map
+                (\c ->
+                      if c == '•'
+                          then '-'
+                          else c)
+        showTags [] = ""
         showTags ts = ":" ++ intercalate ":" ts ++ ":"
         showDate date =
             let dateTime = edDate date
@@ -98,7 +102,7 @@ orgify cal =
     let eventMap = vcEvents cal
         events = snd <$> M.toList eventMap
         entries = toEntry <$> events
-    in unlines $ show <$> entries
+    in ("* FromICal\n" ++) $ unlines $ show <$> entries
 
 
 toEntry :: VEvent -> OrgEntry
