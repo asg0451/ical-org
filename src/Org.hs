@@ -41,14 +41,17 @@ instance Show OrgEntry where
                 fromJustDef "" title ++ "    " ++ showTags tags ++ "\n"
             dateLine =
                 case sched of
-                    Just date -> Just $ "SCHEDULED: " ++ showDate date ++ "\n"
+                    Just date -> "\tSCHEDULED: " ++ showDate date ++ "\n"
                     Nothing ->
                         case dead of
                             Just date ->
-                                Just $ "DEADLINE: " ++ showDate date ++ "\n"
-                            Nothing -> Nothing
-        in mconcat
-               [firstLine, fromJustDef "" dateLine, fromJustDef "" cont, "\n"]
+                                "\tDEADLINE: " ++ showDate date ++ "\n"
+                            Nothing -> ""
+            content =
+                case cont of
+                    Nothing -> ""
+                    Just c -> unlines $ ("\t" ++) <$> lines c
+        in mconcat [firstLine, dateLine, content, "\n"]
       where
         showTags ts = ":" ++ intercalate ":" ts ++ ":"
         showDate date =
@@ -95,7 +98,7 @@ orgify cal =
     let eventMap = vcEvents cal
         events = snd <$> M.toList eventMap
         entries = toEntry <$> events
-    in show entries
+    in unlines $ show <$> entries
 
 
 toEntry :: VEvent -> OrgEntry

@@ -14,4 +14,4 @@ main = do
         Left err -> putStrLn err
         Right ([cal],msgs) -> do
             let orgText = orgify cal
-            print orgText
+            putStrLn orgText
